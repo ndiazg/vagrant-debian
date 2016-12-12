@@ -1,0 +1,141 @@
+---
+- hosts: all
+  become: true
+  become_user: root
+  tasks:
+  - name: No password sudo
+    lineinfile: 
+      dest: /etc/sudoers
+      regexp: '^%sudo'
+      line: '%sudo   ALL=(ALL) NOPASSWD: ALL'
+  - name: Install misc dev tools
+    apt: name={{ item }} state=present
+    with_items:
+      - curl
+      - git
+      - rsync
+      - gcc
+      - g++
+      - make
+      - bzip2
+      - unzip
+      - libssl-dev
+      - vim
+      - lynx
+      - build-essential
+      - libxml2-dev
+      - libbz2-dev
+      - telnet
+      - imagemagick
+      - samba
+      - exim4-base
+      - ruby
+      - ruby-dev
+  - name: Install apache
+    apt: name=apache2 state=latest
+  - name: Configure apache user
+    user:
+      name: www-data
+      shell: /bin/bash
+      password: '$6$DoDsDeMSxK4L$d5Tk6NX1N5kxmmQn73Zceg1lQQ7JUKeueHJN3kRVE2zTWD5f8mQH4jSnK/dNR24svbIXQLC66MWgPBL7.5gJ..'
+      groups: www-data,sudo
+      append: yes
+  - name: Apache home
+    file:
+      path: /var/www
+      state: directory
+      owner: www-data
+      group: www-data
+  - name: Apache desktop
+    file:
+      path: /var/www/Desktop
+      state: directory
+      owner: www-data
+      group: www-data
+  - name: Html folder
+    file:
+      path: /var/www/html/conf.d
+      state: directory
+      owner: www-data
+      group: www-data
+  - name: Enable virtual hosts
+    copy:
+      src: files/apache.conf
+      dest: /etc/apache2/conf-enabled/apache.conf
+      owner: root
+      group: root
+      mode: 0644
+  - name: Virtual host example
+    copy:
+      src: files/example.com.conf
+      dest: /var/www/html/conf.d/example.com.conf
+      owner: www-data
+      group: www-data
+      mode: 0754
+  - name: Ensure apache is running
+    service: name=apache2 state=started enabled=yes
+  - name: Install php
+    apt: name={{ item }} state=latest
+    with_items:
+      - php
+      - php5-mcrypt
+      - php5-curl
+      - php5-mysql
+      - php5-cli
+      - php5-memcache
+      - php5-memcached
+      - php-db
+      - php5-gd
+      - php5-imap
+      - php5-dev
+      - phpunit
+      - php-pear
+      - php5-xdebug
+      - php5-xmlrpc
+  - name: Install composer
+    shell: '/usr/bin/curl -sS https://getcomposer.org/installer | HOME=/var/www php -- --install-dir=/usr/bin --filename=composer'
+    args:
+      creates: /usr/bin/composer
+  - name: Install mysql
+    apt: name=mysql-server state=latest
+  - name: Ensure mysql is running
+    service: name=mysql state=started enabled=yes
+  - name: Exim config
+    lineinfile: 
+      dest: /etc/exim4/update-exim4.conf.conf
+      regexp: "^dc_eximconfig_configtype='local'"
+      line: "dc_eximconfig_configtype='internet'"
+  - name: Update Exim
+    shell: '/usr/sbin/update-exim4.conf > /var/log/exim-updated.log'
+    args:
+      creates: /var/log/exim-updated.log
+#  - name: Samba service
+#    service: name=samba state=started enabled=yes
+  - name: Samba share for www-data
+    shell: '/bin/echo -ne "www-data\nwww-data\n" | smbpasswd -a -s www-data >> /var/log/smbpasswd.log'
+    args:
+      creates: /var/log/smbpasswd.log
+  - name: Samba config file
+    copy:
+      src: files/smb.conf
+      dest: /etc/samba/smb.conf
+      owner: root
+      group: root
+      mode: 0644
+  - name: Node source
+    shell: '/usr/bin/curl -sL https://deb.nodesource.com/setup_6.x | /bin/bash -'
+    args:
+      creates: /etc/apt/sources.list.d/nodesource.list
+  - name: Install node
+    apt: name=nodejs state=latest
+  - name: Node modules
+    shell: '/usr/bin/npm install --global npm gulp gulp-cli bower grunt grunt-cli yo generator-angular'
+    args:
+      creates: /usr/bin/grunt
+  - name: Install sass and compass
+    shell: '/usr/bin/gem install sass --version 3.4.20 && /usr/bin/gem install compass'
+    args:
+      creates: /usr/local/bin/sass
+  handlers:
+  - name: Restart apache
+    service: name=apache2 state=restarted
